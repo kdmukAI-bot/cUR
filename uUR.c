@@ -10,6 +10,37 @@
 #include "src/ur_decoder.h"
 #include "src/ur_encoder.h"
 
+// ---------------------------------------------------------------------------
+// MicroPython version compatibility.
+//
+// MicroPython's "type slots" refactor (v1.19) changed, all at once, how object
+// types are defined, how objects are allocated with a finaliser, and the arity
+// of MP_REGISTER_MODULE. This binding supports BOTH the modern API (>= 1.19,
+// e.g. MicroPython 1.27) and the older MaixPy-era API (< 1.19, e.g. the build
+// Krux runs on). The trivial differences are absorbed by the two shims below so
+// the body of this file uses one (modern) spelling; the type definitions and
+// module registration, which cannot be unified cleanly, use explicit #if/#else
+// with the legacy branch kept verbatim.
+// ---------------------------------------------------------------------------
+
+// MP_ERROR_TEXT (compressed ROM error strings) arrived in v1.12; on older
+// builds that lack it, fall back to the raw string.
+#ifndef MP_ERROR_TEXT
+#define MP_ERROR_TEXT(x) (x)
+#endif
+
+// mp_obj_malloc_with_finaliser(struct_type, obj_type) allocates a GC object
+// with a finaliser and sets its type. On pre-v1.19 MicroPython, express it in
+// terms of the legacy m_new_obj_with_finaliser() + an explicit base.type set.
+#ifndef mp_obj_malloc_with_finaliser
+#define mp_obj_malloc_with_finaliser(struct_type, obj_type)                    \
+  ({                                                                           \
+    struct_type *_uur_o = m_new_obj_with_finaliser(struct_type);               \
+    _uur_o->base.type = (obj_type);                                            \
+    _uur_o;                                                                    \
+  })
+#endif
+
 // URDecoder class structure
 typedef struct {
   mp_obj_base_t base;
@@ -24,41 +55,37 @@ typedef struct {
                                     // prevent memory leaks
 } mp_obj_ur_encoder_t;
 
-// Forward declarations
-static const mp_obj_type_t mp_type_ur_decoder;
-static const mp_obj_type_t mp_type_ur_encoder;
-
 // Shared UR decoder error -> MicroPython exception mapping. Called on
 // any path that produces an error; mp_raise_msg does not return so the
 // helper is effectively NORETURN.
 static void raise_ur_decoder_error(ur_decoder_error_t error) {
   switch (error) {
   case UR_DECODER_ERROR_INVALID_SCHEME:
-    mp_raise_msg(&mp_type_ValueError, "Invalid UR scheme");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid UR scheme"));
     break;
   case UR_DECODER_ERROR_INVALID_TYPE:
-    mp_raise_msg(&mp_type_ValueError, "Invalid UR type");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid UR type"));
     break;
   case UR_DECODER_ERROR_INVALID_PATH_LENGTH:
-    mp_raise_msg(&mp_type_ValueError, "Invalid UR path length");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid UR path length"));
     break;
   case UR_DECODER_ERROR_INVALID_SEQUENCE_COMPONENT:
-    mp_raise_msg(&mp_type_ValueError, "Invalid sequence component");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid sequence component"));
     break;
   case UR_DECODER_ERROR_INVALID_FRAGMENT:
-    mp_raise_msg(&mp_type_ValueError, "Invalid fragment");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid fragment"));
     break;
   case UR_DECODER_ERROR_INVALID_PART:
-    mp_raise_msg(&mp_type_ValueError, "Invalid part");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid part"));
     break;
   case UR_DECODER_ERROR_INVALID_CHECKSUM:
-    mp_raise_msg(&mp_type_ValueError, "Invalid checksum");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid checksum"));
     break;
   case UR_DECODER_ERROR_MEMORY:
-    mp_raise_msg(&mp_type_RuntimeError, "Memory error");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Memory error"));
     break;
   default:
-    mp_raise_msg(&mp_type_RuntimeError, "URDecoder error");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("URDecoder error"));
     break;
   }
 }
@@ -68,8 +95,6 @@ typedef struct {
   mp_obj_base_t base;
   ur_t *ur;
 } mp_obj_ur_t;
-
-static const mp_obj_type_t mp_type_ur;
 
 // UR implementation (matches Python UR class)
 static void ur_print(const mp_print_t *print, mp_obj_t self_in,
@@ -97,12 +122,11 @@ static mp_obj_t ur_make_new(const mp_obj_type_t *type, size_t n_args,
   // through the exception long-jump in mp_raise_msg.
   ur_t *ur = ur_new(ur_type, cbor_buf.buf, cbor_buf.len);
   if (!ur) {
-    mp_raise_msg(&mp_type_MemoryError, "Failed to create UR object");
+    mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Failed to create UR object"));
   }
 
   // with_finaliser so __del__ (ur_del) runs on GC and frees ur_t.
-  mp_obj_ur_t *self = m_new_obj_with_finaliser(mp_obj_ur_t);
-  self->base.type = type;
+  mp_obj_ur_t *self = mp_obj_malloc_with_finaliser(mp_obj_ur_t, type);
   self->ur = ur;
 
   return MP_OBJ_FROM_PTR(self);
@@ -148,11 +172,17 @@ static const mp_rom_map_elem_t ur_locals_dict_table[] = {
 };
 static MP_DEFINE_CONST_DICT(ur_locals_dict, ur_locals_dict_table);
 
+#if defined(MP_DEFINE_CONST_OBJ_TYPE)
+MP_DEFINE_CONST_OBJ_TYPE(mp_type_ur, MP_QSTR_UR, MP_TYPE_FLAG_NONE, make_new,
+                         ur_make_new, print, ur_print, attr, ur_attr,
+                         locals_dict, &ur_locals_dict);
+#else
 static const mp_obj_type_t mp_type_ur = {
     {&mp_type_type},   .name = MP_QSTR_UR,
     .print = ur_print, .make_new = ur_make_new,
     .attr = ur_attr,   .locals_dict = (mp_obj_dict_t *)&ur_locals_dict,
 };
+#endif
 
 // URDecoder implementation
 static void ur_decoder_print(const mp_print_t *print, mp_obj_t self_in,
@@ -173,12 +203,12 @@ static mp_obj_t ur_decoder_make_new(const mp_obj_type_t *type, size_t n_args,
   // wrapper through mp_raise_msg's long-jump.
   ur_decoder_t *decoder = ur_decoder_new();
   if (!decoder) {
-    mp_raise_msg(&mp_type_MemoryError, "Failed to create URDecoder");
+    mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Failed to create URDecoder"));
   }
 
   // with_finaliser so __del__ (ur_decoder_del) runs on GC and frees decoder.
-  mp_obj_ur_decoder_t *self = m_new_obj_with_finaliser(mp_obj_ur_decoder_t);
-  self->base.type = type;
+  mp_obj_ur_decoder_t *self =
+      mp_obj_malloc_with_finaliser(mp_obj_ur_decoder_t, type);
   self->decoder = decoder;
 
   return MP_OBJ_FROM_PTR(self);
@@ -200,7 +230,7 @@ static mp_obj_t ur_decoder_receive_part_py(mp_obj_t self_in,
   mp_obj_ur_decoder_t *self = MP_OBJ_TO_PTR(self_in);
 
   if (!self->decoder) {
-    mp_raise_msg(&mp_type_RuntimeError, "URDecoder is closed");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("URDecoder is closed"));
   }
 
   const char *part_cstr = mp_obj_str_get_str(part_str);
@@ -241,12 +271,18 @@ static mp_obj_t ur_decoder_is_success_py(mp_obj_t self_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(ur_decoder_is_success_obj,
                                  ur_decoder_is_success_py);
 
+// `result`, `expected_part_count`, and `processed_parts_count` are exposed as
+// read-only attributes via ur_decoder_attr() below (not as bound methods), so
+// these method-object definitions are unused. Kept only for the legacy
+// (pre-v1.19) build; modern toolchains reject them under
+// -Werror=unused-const-variable.
+#if !defined(MP_DEFINE_CONST_OBJ_TYPE)
 // result property
 static mp_obj_t ur_decoder_result(mp_obj_t self_in) {
   mp_obj_ur_decoder_t *self = MP_OBJ_TO_PTR(self_in);
 
   if (!self->decoder) {
-    mp_raise_msg(&mp_type_RuntimeError, "URDecoder is closed");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("URDecoder is closed"));
   }
 
   // Check if decoding was successful before getting the result
@@ -294,6 +330,7 @@ static mp_obj_t ur_decoder_processed_parts_count_py(mp_obj_t self_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(ur_decoder_processed_parts_count_obj,
                                  ur_decoder_processed_parts_count_py);
+#endif // !MP_DEFINE_CONST_OBJ_TYPE
 
 // estimated_percent_complete method
 static mp_obj_t ur_decoder_estimated_percent_complete_py(mp_obj_t self_in) {
@@ -376,6 +413,12 @@ static void ur_decoder_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 }
 
 // URDecoder type definition
+#if defined(MP_DEFINE_CONST_OBJ_TYPE)
+MP_DEFINE_CONST_OBJ_TYPE(mp_type_ur_decoder, MP_QSTR_URDecoder,
+                         MP_TYPE_FLAG_NONE, make_new, ur_decoder_make_new, print,
+                         ur_decoder_print, attr, ur_decoder_attr, locals_dict,
+                         &ur_decoder_locals_dict);
+#else
 static const mp_obj_type_t mp_type_ur_decoder = {
     {&mp_type_type},
     .name = MP_QSTR_URDecoder,
@@ -384,6 +427,7 @@ static const mp_obj_type_t mp_type_ur_decoder = {
     .attr = ur_decoder_attr,
     .locals_dict = (mp_obj_dict_t *)&ur_decoder_locals_dict,
 };
+#endif
 
 // UREncoder implementation
 static void ur_encoder_print(const mp_print_t *print, mp_obj_t self_in,
@@ -421,12 +465,12 @@ static mp_obj_t ur_encoder_make_new(const mp_obj_type_t *type, size_t n_args,
   // Type-check BEFORE MP_OBJ_TO_PTR — otherwise passing a non-UR object
   // dereferences garbage as ur_t*.
   if (!mp_obj_is_type(parsed_args[ARG_ur].u_obj, &mp_type_ur)) {
-    mp_raise_TypeError("First argument must be a UR object");
+    mp_raise_TypeError(MP_ERROR_TEXT("First argument must be a UR object"));
   }
   mp_obj_ur_t *ur_obj = MP_OBJ_TO_PTR(parsed_args[ARG_ur].u_obj);
 
   if (!ur_obj->ur) {
-    mp_raise_msg(&mp_type_ValueError, "Invalid UR object");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Invalid UR object"));
   }
 
   // Clamp fragment-length params coming from Python. 10..2048 covers any
@@ -435,7 +479,7 @@ static mp_obj_t ur_encoder_make_new(const mp_obj_type_t *type, size_t n_args,
   mp_int_t raw_min = parsed_args[ARG_min_fragment_len].u_int;
   if (raw_max < 10 || raw_max > 2048 || raw_min < 1 || raw_min > raw_max) {
     mp_raise_msg(&mp_type_ValueError,
-                 "fragment_len out of range (min 1..max, max 10..2048)");
+                 MP_ERROR_TEXT("fragment_len out of range (min 1..max, max 10..2048)"));
   }
   size_t max_fragment_len = (size_t)raw_max;
   size_t min_fragment_len = (size_t)raw_min;
@@ -450,12 +494,12 @@ static mp_obj_t ur_encoder_make_new(const mp_obj_type_t *type, size_t n_args,
       ur_encoder_new(ur_type_str, cbor_data, cbor_len, max_fragment_len,
                      first_seq_num, min_fragment_len);
   if (!encoder) {
-    mp_raise_msg(&mp_type_MemoryError, "Failed to create UREncoder");
+    mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Failed to create UREncoder"));
   }
 
   // with_finaliser so __del__ (ur_encoder_del) runs on GC.
-  mp_obj_ur_encoder_t *self = m_new_obj_with_finaliser(mp_obj_ur_encoder_t);
-  self->base.type = type;
+  mp_obj_ur_encoder_t *self =
+      mp_obj_malloc_with_finaliser(mp_obj_ur_encoder_t, type);
   self->encoder = encoder;
   self->fountain_encoder_cached = MP_OBJ_NULL;
 
@@ -477,7 +521,7 @@ static mp_obj_t ur_encoder_next_part_py(mp_obj_t self_in) {
   mp_obj_ur_encoder_t *self = MP_OBJ_TO_PTR(self_in);
 
   if (!self->encoder) {
-    mp_raise_msg(&mp_type_RuntimeError, "UREncoder is closed");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("UREncoder is closed"));
   }
 
   char *ur_part = NULL;
@@ -487,11 +531,11 @@ static mp_obj_t ur_encoder_next_part_py(mp_obj_t self_in) {
     if (ur_part) {
       free(ur_part);
     }
-    mp_raise_msg(&mp_type_RuntimeError, "Failed to generate next part");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to generate next part"));
   }
 
   if (!ur_part) {
-    mp_raise_msg(&mp_type_RuntimeError, "Generated NULL part");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Generated NULL part"));
   }
 
   // Copy the string into MicroPython's memory space
@@ -592,12 +636,18 @@ static const mp_rom_map_elem_t fountain_encoder_wrapper_locals_dict_table[] = {
 static MP_DEFINE_CONST_DICT(fountain_encoder_wrapper_locals_dict,
                             fountain_encoder_wrapper_locals_dict_table);
 
+#if defined(MP_DEFINE_CONST_OBJ_TYPE)
+MP_DEFINE_CONST_OBJ_TYPE(mp_type_fountain_encoder_wrapper, MP_QSTR_FountainEncoder,
+                         MP_TYPE_FLAG_NONE, print, fountain_encoder_wrapper_print,
+                         locals_dict, &fountain_encoder_wrapper_locals_dict);
+#else
 static const mp_obj_type_t mp_type_fountain_encoder_wrapper = {
     {&mp_type_type},
     .name = MP_QSTR_FountainEncoder,
     .print = fountain_encoder_wrapper_print,
     .locals_dict = (mp_obj_dict_t *)&fountain_encoder_wrapper_locals_dict,
 };
+#endif
 
 // UREncoder attributes
 static void ur_encoder_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
@@ -642,6 +692,12 @@ static void ur_encoder_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 }
 
 // UREncoder type definition
+#if defined(MP_DEFINE_CONST_OBJ_TYPE)
+MP_DEFINE_CONST_OBJ_TYPE(mp_type_ur_encoder, MP_QSTR_UREncoder,
+                         MP_TYPE_FLAG_NONE, make_new, ur_encoder_make_new, print,
+                         ur_encoder_print, attr, ur_encoder_attr, locals_dict,
+                         &ur_encoder_locals_dict);
+#else
 static const mp_obj_type_t mp_type_ur_encoder = {
     {&mp_type_type},
     .name = MP_QSTR_UREncoder,
@@ -650,6 +706,7 @@ static const mp_obj_type_t mp_type_ur_encoder = {
     .attr = ur_encoder_attr,
     .locals_dict = (mp_obj_dict_t *)&ur_encoder_locals_dict,
 };
+#endif
 
 // ============================================================================
 // Types Module (for URTypes functionality)
@@ -664,7 +721,7 @@ static mp_obj_t bytes_from_cbor_py(mp_obj_t cbor_data_in) {
   bytes_data_t *bytes =
       bytes_from_cbor((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!bytes) {
-    mp_raise_msg(&mp_type_ValueError, "Failed to decode Bytes from CBOR");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Failed to decode Bytes from CBOR"));
   }
 
   // Get raw bytes data
@@ -689,7 +746,7 @@ static mp_obj_t bytes_to_cbor_py(mp_obj_t bytes_data_in) {
   // Create Bytes from raw bytes
   bytes_data_t *bytes = bytes_new((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!bytes) {
-    mp_raise_msg(&mp_type_MemoryError, "Failed to create Bytes");
+    mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Failed to create Bytes"));
   }
 
   // Encode to CBOR
@@ -697,7 +754,7 @@ static mp_obj_t bytes_to_cbor_py(mp_obj_t bytes_data_in) {
   uint8_t *cbor_data = bytes_to_cbor(bytes, &cbor_len);
   if (!cbor_data) {
     bytes_free(bytes);
-    mp_raise_msg(&mp_type_RuntimeError, "Failed to encode Bytes to CBOR");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to encode Bytes to CBOR"));
   }
 
   // Create Python bytes object
@@ -723,7 +780,7 @@ static mp_obj_t psbt_from_cbor_py(mp_obj_t cbor_data_in) {
   // Decode CBOR to PSBT
   psbt_data_t *psbt = psbt_from_cbor((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!psbt) {
-    mp_raise_msg(&mp_type_ValueError, "Failed to decode PSBT from CBOR");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Failed to decode PSBT from CBOR"));
   }
 
   // Get raw PSBT data
@@ -748,7 +805,7 @@ static mp_obj_t psbt_to_cbor_py(mp_obj_t psbt_data_in) {
   // Create PSBT from raw bytes
   psbt_data_t *psbt = psbt_new((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!psbt) {
-    mp_raise_msg(&mp_type_MemoryError, "Failed to create PSBT");
+    mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Failed to create PSBT"));
   }
 
   // Encode to CBOR
@@ -756,7 +813,7 @@ static mp_obj_t psbt_to_cbor_py(mp_obj_t psbt_data_in) {
   uint8_t *cbor_data = psbt_to_cbor(psbt, &cbor_len);
   if (!cbor_data) {
     psbt_free(psbt);
-    mp_raise_msg(&mp_type_RuntimeError, "Failed to encode PSBT to CBOR");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to encode PSBT to CBOR"));
   }
 
   // Create Python bytes object
@@ -783,7 +840,7 @@ static mp_obj_t bip39_words_from_cbor_py(mp_obj_t cbor_data_in) {
   bip39_data_t *bip39 =
       bip39_from_cbor((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!bip39) {
-    mp_raise_msg(&mp_type_ValueError, "Failed to decode BIP39 from CBOR");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Failed to decode BIP39 from CBOR"));
   }
 
   // Get words
@@ -817,14 +874,14 @@ static mp_obj_t output_from_cbor_py(mp_obj_t cbor_data_in) {
   output_data_t *output =
       output_from_cbor((const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!output) {
-    mp_raise_msg(&mp_type_ValueError, "Failed to decode Output from CBOR");
+    mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("Failed to decode Output from CBOR"));
   }
 
   // Generate descriptor string with checksum
   char *descriptor = output_descriptor(output, true);
   if (!descriptor) {
     output_free(output);
-    mp_raise_msg(&mp_type_RuntimeError, "Failed to generate output descriptor");
+    mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to generate output descriptor"));
   }
 
   // Create Python string from descriptor
@@ -848,7 +905,7 @@ static mp_obj_t output_from_cbor_account_py(mp_obj_t cbor_data_in) {
       (const uint8_t *)bufinfo.buf, bufinfo.len);
   if (!descriptor) {
     mp_raise_msg(&mp_type_ValueError,
-                 "Failed to extract output descriptor from Account CBOR");
+                 MP_ERROR_TEXT("Failed to extract output descriptor from Account CBOR"));
   }
 
   // Create Python string from descriptor
@@ -930,4 +987,8 @@ const mp_obj_module_t bc_ur_module = {
     .globals = (mp_obj_dict_t *)&bc_ur_globals,
 };
 
+#if defined(MP_DEFINE_CONST_OBJ_TYPE)
+MP_REGISTER_MODULE(MP_QSTR_uUR, bc_ur_module);
+#else
 MP_REGISTER_MODULE(MP_QSTR_uUR, bc_ur_module, MODULE_BC_UR_ENABLED);
+#endif

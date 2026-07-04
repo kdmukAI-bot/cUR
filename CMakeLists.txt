@@ -20,10 +20,11 @@ idf_component_register(
         "src/types/keypath.c"
         "src/types/registry.c"
         "src/types/byte_buffer.c"
+        "src/types/bip39.c"
     INCLUDE_DIRS
         "src"
     REQUIRES
-        mbedtls mbedtls_compat
+        mbedtls
 )
 
 # Route sha256_compat.h to mbedtls (hardware-accelerated on ESP32P4).
