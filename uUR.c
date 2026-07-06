@@ -343,9 +343,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(ur_decoder_processed_parts_count_obj,
 // original reference estimate byte-for-byte, so existing callers are
 // unaffected; True selects the weighted-mixed-frames method, which gives
 // partial credit for fragments still only present inside mixed/XOR'd frames.
-static mp_obj_t ur_decoder_estimated_percent_complete_py(size_t n_args,
-                                                         const mp_obj_t *pos_args,
-                                                         mp_map_t *kw_args) {
+static mp_obj_t ur_decoder_estimated_percent_complete_py(
+    size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
   static const mp_arg_t allowed_args[] = {
       {MP_QSTR_weight_mixed_frames, MP_ARG_BOOL, {.u_bool = false}},
   };

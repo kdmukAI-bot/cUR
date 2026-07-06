@@ -1387,45 +1387,45 @@ double fountain_decoder_estimated_percent_complete_weighted(
     return 0.0;
   if (fountain_decoder_is_complete(decoder))
     return 1.0;
-  if (!decoder->expected_part_indexes ||
-      decoder->expected_part_indexes->count == 0)
+  size_t parts = fountain_decoder_expected_part_count(decoder);
+  if (parts == 0)
     return 0.0;
 
-  size_t parts = decoder->expected_part_indexes->count;
-
-  // Per-index partial scores from the mixed parts. Fragment indexes are in
-  // [0, seq_len) == [0, parts), so a scratch array keyed by index mirrors the
-  // Python dict `mixed_index_scoring`. Fall back to the reference estimate if
-  // the scratch allocation fails.
-  double *scoring = calloc(parts, sizeof(double));
-  if (!scoring)
-    return fountain_decoder_estimated_percent_complete(decoder);
-
+  double mixed_score = 0.0;
   mixed_parts_hash_t *hash = decoder->mixed_parts_hash;
-  if (hash) {
-    for (size_t b = 0; b < hash->capacity; b++) {
-      for (hash_entry_t *entry = hash->buckets[b]; entry; entry = entry->next) {
-        size_t cnt = entry->key.count;
-        if (cnt == 0)
-          continue;
-        double score = 1.0 / (double)cnt;
-        for (size_t k = 0; k < cnt; k++) {
-          size_t index = entry->key.indexes[k];
-          if (index < parts)
-            scoring[index] += score;
+  if (hash && hash->count > 0) {
+    // Per-index partial scores from the mixed parts. Fragment indexes are in
+    // [0, seq_len) == [0, parts), so a scratch array keyed by index mirrors
+    // the Python dict `mixed_index_scoring`. If the scratch allocation fails,
+    // mixed_score stays 0 — still the weighted metric, just without partial
+    // credit, so the value never jumps to a different scale.
+    double *scoring = safe_malloc(parts * sizeof(double));
+    if (scoring) {
+      for (size_t b = 0; b < hash->capacity; b++) {
+        for (hash_entry_t *entry = hash->buckets[b]; entry;
+             entry = entry->next) {
+          double score = 1.0 / (double)entry->key.count;
+          for (size_t k = 0; k < entry->key.count; k++) {
+            size_t index = entry->key.indexes[k];
+            if (index < parts)
+              scoring[index] += score;
+          }
         }
       }
+      for (size_t i = 0; i < parts; i++) {
+        mixed_score += scoring[i] < 0.75 ? scoring[i] : 0.75;
+      }
+      safe_free(scoring);
     }
   }
 
-  double mixed_score = 0.0;
-  for (size_t i = 0; i < parts; i++) {
-    mixed_score += scoring[i] < 0.75 ? scoring[i] : 0.75;
-  }
-  free(scoring);
-
   double num_complete = (double)decoder->received_part_indexes.count;
-  return (num_complete + mixed_score) / (double)parts;
+  double progress = (num_complete + mixed_score) / (double)parts;
+  // Never report >= 1.0 while incomplete (same 0.99 cap as the reference
+  // estimate): keeps rounded displays below 100% and bounds the result even
+  // if a stale mixed entry or mismatched stream breaks the invariant that
+  // mixed keys exclude received indexes.
+  return progress > 0.99 ? 0.99 : progress;
 }
 
 uint8_t *fountain_decoder_result_message(fountain_decoder_t *decoder) {
