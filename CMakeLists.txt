@@ -1,3 +1,13 @@
+# mbedtls_compat is a custom shim component from the Kern project (not shipped
+# with ESP-IDF) that restores the legacy mbedtls_sha256() API on mbedTLS v4
+# (ESP-IDF >= 6.0). On earlier IDF releases (e.g. 5.5.x) the shim isn't needed
+# or present, and naming a nonexistent component fails at configure time.
+if(IDF_VERSION_MAJOR GREATER_EQUAL 6)
+    set(UR_IDF_REQUIRES mbedtls mbedtls_compat)
+else()
+    set(UR_IDF_REQUIRES mbedtls)
+endif()
+
 idf_component_register(
     SRCS
         "src/ur.c"
@@ -24,7 +34,7 @@ idf_component_register(
     INCLUDE_DIRS
         "src"
     REQUIRES
-        mbedtls
+        ${UR_IDF_REQUIRES}
 )
 
 # Route sha256_compat.h to mbedtls (hardware-accelerated on ESP32P4).
