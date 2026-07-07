@@ -71,6 +71,16 @@ size_t fountain_decoder_expected_part_count(fountain_decoder_t *decoder);
 size_t fountain_decoder_processed_parts_count(fountain_decoder_t *decoder);
 
 /**
+ * Get the number of unique pure fragments recovered so far (out of
+ * expected_part_count). Unlike processed_parts_count this excludes
+ * fountain/mixed frames whose fragments are not yet reduced to pure form,
+ * so it is suitable for driving an "n of m" progress display.
+ * @param decoder Pointer to fountain decoder
+ * @return Number of unique received fragment indexes
+ */
+size_t fountain_decoder_received_parts_count(fountain_decoder_t *decoder);
+
+/**
  * Get estimated completion percentage
  * @param decoder Pointer to fountain decoder
  * @return Completion percentage (0.0 to 1.0)

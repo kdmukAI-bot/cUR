@@ -205,10 +205,16 @@ bool ur_encoder_next_part(ur_encoder_t *encoder, char **ur_part_out) {
   // If single part, encode directly from the fountain encoder's only
   // fragment. For single-part payloads, fragment_len == cbor_len (no
   // tail padding), so we hand it straight to ur_encoder_encode_single.
+  // Still advance seq_num so ur_encoder_is_complete() becomes true once
+  // the part has been emitted (matching multi-part behaviour).
   if (ur_encoder_is_single_part(encoder)) {
     const fragment_array_t *frags = &encoder->fountain_encoder->fragments;
-    return ur_encoder_encode_single(encoder->type, frags->fragments[0],
-                                    frags->fragment_lens[0], ur_part_out);
+    if (!ur_encoder_encode_single(encoder->type, frags->fragments[0],
+                                  frags->fragment_lens[0], ur_part_out)) {
+      return false;
+    }
+    encoder->fountain_encoder->seq_num++;
+    return true;
   }
 
   // Get next fountain encoder part

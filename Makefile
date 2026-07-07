@@ -38,7 +38,7 @@ TEST_SUPPORT_OBJECTS = $(TEST_UTILS_OBJECT) $(TEST_HARNESS_OBJECT)
 TEST_STEMS = bytes_decoder bytes_encoder output_decoder output_encoder \
              PSBT_decoder PSBT_encoder bip39_decoder \
              account_descriptor_decoder output_descriptor_roundtrip \
-             weighted_progress negative
+             weighted_progress negative envelope_api
 
 TEST_BINS = $(TEST_STEMS:%=tests/test_ur_%)
 TEST_TARGETS = $(foreach s,$(TEST_STEMS),test-$(subst _,-,$(s)))

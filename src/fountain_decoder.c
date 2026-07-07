@@ -1453,3 +1453,9 @@ size_t fountain_decoder_processed_parts_count(fountain_decoder_t *decoder) {
     return 0;
   return decoder->processed_parts_count;
 }
+
+size_t fountain_decoder_received_parts_count(fountain_decoder_t *decoder) {
+  if (!decoder)
+    return 0;
+  return decoder->received_part_indexes.count;
+}

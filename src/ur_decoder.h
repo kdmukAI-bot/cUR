@@ -91,6 +91,14 @@ size_t ur_decoder_expected_part_count(ur_decoder_t *decoder);
 size_t ur_decoder_processed_parts_count(ur_decoder_t *decoder);
 
 /**
+ * Get the number of unique pure fragments recovered so far (out of
+ * expected_part_count) — suitable for an "n of m" progress display.
+ * @param decoder Pointer to URDecoder instance
+ * @return Number of unique received fragment indexes
+ */
+size_t ur_decoder_received_parts_count(ur_decoder_t *decoder);
+
+/**
  * Get estimated completion percentage
  * @param decoder Pointer to URDecoder instance
  * @return Completion percentage (0.0 to 1.0)

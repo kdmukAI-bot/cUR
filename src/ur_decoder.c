@@ -23,9 +23,14 @@
 // decoder (degree sampler, hash table, part-index bitmap); message_len
 // drives the final reassembly buffer. Reject anything larger than what a
 // real Bitcoin UR would ever need, to keep a malicious QR from exhausting
-// embedded heap.
+// embedded heap. Both can be overridden at compile time by integrators
+// with different limits.
+#ifndef UR_MAX_SEQ_LEN
 #define UR_MAX_SEQ_LEN 1024u
+#endif
+#ifndef UR_MAX_MESSAGE_LEN
 #define UR_MAX_MESSAGE_LEN (256u * 1024u)
+#endif
 
 static fountain_encoder_part_t *
 create_fountain_part_from_cbor(uint8_t *cbor_data, size_t cbor_len,
@@ -450,6 +455,12 @@ size_t ur_decoder_processed_parts_count(ur_decoder_t *decoder) {
   if (!decoder || !decoder->fountain_decoder)
     return 0;
   return fountain_decoder_processed_parts_count(decoder->fountain_decoder);
+}
+
+size_t ur_decoder_received_parts_count(ur_decoder_t *decoder) {
+  if (!decoder || !decoder->fountain_decoder)
+    return 0;
+  return fountain_decoder_received_parts_count(decoder->fountain_decoder);
 }
 
 double ur_decoder_estimated_percent_complete(ur_decoder_t *decoder) {
