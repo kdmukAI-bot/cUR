@@ -33,12 +33,12 @@ static bool test_file(const char *filepath) {
   }
 
   bool ok = true;
-  if (ur_decoder_estimated_percent_complete_weighted(decoder) != 0.0) {
+  if (ur_decoder_estimated_percent_complete_weighted(decoder) != 0.0f) {
     fprintf(stderr, "❌ Fresh decoder should report 0.0\n");
     ok = false;
   }
 
-  double prev = 0.0;
+  float prev = 0.0f;
   int parts_used = 0;
   for (int i = 0; i < fragment_count && ok; i++) {
     ur_decoder_state_t state = ur_decoder_receive_part(decoder, fragments[i]);
@@ -46,23 +46,29 @@ static bool test_file(const char *filepath) {
       continue;
     parts_used++;
 
-    double weighted = ur_decoder_estimated_percent_complete_weighted(decoder);
+    float weighted = ur_decoder_estimated_percent_complete_weighted(decoder);
     bool complete = ur_decoder_state_is_terminal(state);
 
-    if (weighted < 0.0 || weighted > 1.0) {
+    if (weighted < 0.0f || weighted > 1.0f) {
       fprintf(stderr, "❌ Frame %d: %.6f outside [0, 1]\n", i, weighted);
       ok = false;
     }
-    if (!complete && weighted > 0.99) {
+    // Must compare against 0.99f: the clamp returns the float literal, and
+    // (double)0.99f > 0.99, so a double literal here would false-fail.
+    if (!complete && weighted > 0.99f) {
       fprintf(stderr, "❌ Frame %d: %.6f > 0.99 while incomplete\n", i,
               weighted);
       ok = false;
     }
-    if (complete && weighted != 1.0) {
+    if (complete && weighted != 1.0f) {
       fprintf(stderr, "❌ Frame %d: complete but reports %.6f\n", i, weighted);
       ok = false;
     }
-    if (weighted + 1e-12 < prev) {
+    // Epsilon sized for float: worst-case rounding jitter of the ~150-term
+    // score sums is ~1e-5, while a genuine regression shifts the estimate by
+    // at least one score quantum (1/seq_len)/seq_len ≈ 4e-5 on the largest
+    // test vector.
+    if (weighted + 1e-5f < prev) {
       fprintf(stderr, "❌ Frame %d: decreased from %.6f to %.6f\n", i, prev,
               weighted);
       ok = false;
@@ -88,7 +94,7 @@ static bool test_file(const char *filepath) {
 }
 
 int main(int argc, char *argv[]) {
-  if (ur_decoder_estimated_percent_complete_weighted(NULL) != 0.0) {
+  if (ur_decoder_estimated_percent_complete_weighted(NULL) != 0.0f) {
     fprintf(stderr, "❌ NULL decoder should report 0.0\n");
     return 1;
   }

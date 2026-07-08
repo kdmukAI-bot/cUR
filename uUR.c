@@ -158,9 +158,9 @@ static void ur_decoder_print(const mp_print_t *print, mp_obj_t self_in,
                              mp_print_kind_t kind) {
   (void)kind;
   mp_obj_ur_decoder_t *self = MP_OBJ_TO_PTR(self_in);
-  double progress = ur_decoder_estimated_percent_complete(self->decoder);
+  float progress = ur_decoder_estimated_percent_complete(self->decoder);
   mp_printf(print, "URDecoder(state=%d, progress=%.1f%%)",
-            (int)ur_decoder_get_state(self->decoder), progress * 100.0);
+            (int)ur_decoder_get_state(self->decoder), progress * 100.0f);
 }
 
 static mp_obj_t ur_decoder_make_new(const mp_obj_type_t *type, size_t n_args,
@@ -229,10 +229,10 @@ static mp_obj_t ur_decoder_estimated_percent_complete_py(
 
   mp_obj_ur_decoder_t *self = MP_OBJ_TO_PTR(pos_args[0]);
   if (!self->decoder) {
-    return mp_obj_new_float(0.0);
+    return mp_obj_new_float(0.0f);
   }
 
-  double pct =
+  float pct =
       parsed[0].u_bool
           ? ur_decoder_estimated_percent_complete_weighted(self->decoder)
           : ur_decoder_estimated_percent_complete(self->decoder);

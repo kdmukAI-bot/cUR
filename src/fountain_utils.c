@@ -9,11 +9,18 @@
 // This is an independent implementation written using
 // foundation-ur-py as a reference for testing and validation.
 //
+// All floating point in this file MUST remain `double`. The multipart wire
+// format carries no fragment-index list: decoders re-derive each part's
+// index set by running this exact PRNG/sampler math on the part header, so
+// fragment selection must stay bit-identical with the reference UR
+// implementations (Python/C++/Swift/JS — all IEEE double). Converting to
+// float, or building with -ffast-math, silently breaks cross-wallet
+// decoding.
+//
 
 #include "fountain_utils.h"
 #include "sha256/sha256_compat.h"
 #include "utils.h"
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 

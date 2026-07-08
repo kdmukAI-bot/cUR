@@ -85,7 +85,7 @@ size_t fountain_decoder_received_parts_count(fountain_decoder_t *decoder);
  * @param decoder Pointer to fountain decoder
  * @return Completion percentage (0.0 to 1.0)
  */
-double fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder);
+float fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder);
 
 /**
  * Get estimated completion percentage using the weighted-mixed-frames method
@@ -93,7 +93,7 @@ double fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder);
  * @param decoder Pointer to fountain decoder
  * @return Completion percentage (0.0 to 1.0)
  */
-double fountain_decoder_estimated_percent_complete_weighted(
+float fountain_decoder_estimated_percent_complete_weighted(
     fountain_decoder_t *decoder);
 
 /**

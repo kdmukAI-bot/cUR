@@ -470,15 +470,15 @@ size_t ur_decoder_received_parts_count(ur_decoder_t *decoder) {
   return fountain_decoder_received_parts_count(decoder->fountain_decoder);
 }
 
-double ur_decoder_estimated_percent_complete(ur_decoder_t *decoder) {
+float ur_decoder_estimated_percent_complete(ur_decoder_t *decoder) {
   if (!decoder || !decoder->fountain_decoder)
-    return 0.0;
+    return 0.0f;
   return fountain_decoder_estimated_percent_complete(decoder->fountain_decoder);
 }
 
-double ur_decoder_estimated_percent_complete_weighted(ur_decoder_t *decoder) {
+float ur_decoder_estimated_percent_complete_weighted(ur_decoder_t *decoder) {
   if (!decoder || !decoder->fountain_decoder)
-    return 0.0;
+    return 0.0f;
   return fountain_decoder_estimated_percent_complete_weighted(
       decoder->fountain_decoder);
 }

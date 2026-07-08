@@ -362,6 +362,29 @@ fountain_encoder_t *fountain_encoder_new(const uint8_t *message,
   encoder->last_part_indexes.count = 0;
   encoder->last_part_indexes.capacity = 0;
 
+  // Build the degree sampler once — every next_part call reuses it (the
+  // alias table depends only on the fragment count). Mirrors the decoder's
+  // cached sampler; draw-for-draw identical to the per-part build. Must
+  // stay double: interop-critical math, see fountain_utils.c.
+  if (encoder->fragments.count > 0) {
+    double *degree_probs =
+        safe_malloc(encoder->fragments.count * sizeof(double));
+    if (!degree_probs) {
+      fountain_encoder_free(encoder);
+      return NULL;
+    }
+    for (size_t i = 0; i < encoder->fragments.count; i++) {
+      degree_probs[i] = 1.0 / (i + 1);
+    }
+    if (!random_sampler_init(&encoder->degree_sampler, degree_probs,
+                             encoder->fragments.count)) {
+      free(degree_probs);
+      fountain_encoder_free(encoder);
+      return NULL;
+    }
+    free(degree_probs);
+  }
+
   return encoder;
 }
 
@@ -373,6 +396,7 @@ void fountain_encoder_free(fountain_encoder_t *encoder) {
   fragment_array_free(&encoder->fragments);
   // Free indexes array only, not the struct itself (it's embedded)
   free(encoder->last_part_indexes.indexes);
+  random_sampler_free(&encoder->degree_sampler);
   free(encoder);
 }
 
@@ -430,8 +454,9 @@ bool fountain_encoder_next_part(fountain_encoder_t *encoder,
     return false;
   }
 
-  if (!choose_fragments(encoder->seq_num, encoder->fragments.count,
-                        encoder->checksum, indexes)) {
+  if (!choose_fragments_cached(encoder->seq_num, encoder->fragments.count,
+                               encoder->checksum, indexes,
+                               &encoder->degree_sampler)) {
     part_indexes_free(indexes);
     return false;
   }

@@ -1283,6 +1283,8 @@ bool fountain_decoder_receive_part(fountain_decoder_t *decoder,
       return false;
     }
 
+    // Degree probs and the sampler stay double — interop-critical, must
+    // match reference implementations bit-for-bit (see fountain_utils.c).
     if (part->seq_len > 0) {
       double *degree_probs = safe_malloc(part->seq_len * sizeof(double));
       if (!degree_probs) {
@@ -1357,20 +1359,19 @@ size_t fountain_decoder_expected_part_count(fountain_decoder_t *decoder) {
   return decoder->expected_part_indexes->count;
 }
 
-double
-fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder) {
+float fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder) {
   if (!decoder)
-    return 0.0;
+    return 0.0f;
   if (fountain_decoder_is_complete(decoder))
-    return 1.0;
+    return 1.0f;
   if (!decoder->expected_part_indexes)
-    return 0.0;
+    return 0.0f;
 
-  double estimated_input_parts =
-      fountain_decoder_expected_part_count(decoder) * 1.75;
-  double progress =
-      (double)decoder->processed_parts_count / estimated_input_parts;
-  return progress > 0.99 ? 0.99 : progress;
+  float estimated_input_parts =
+      (float)fountain_decoder_expected_part_count(decoder) * 1.75f;
+  float progress =
+      (float)decoder->processed_parts_count / estimated_input_parts;
+  return progress > 0.99f ? 0.99f : progress;
 }
 
 // Weighted-mixed-frames completion estimate. Ports SeedSigner's
@@ -1381,17 +1382,17 @@ fountain_decoder_estimated_percent_complete(fountain_decoder_t *decoder) {
 // is capped at 0.75 so a not-yet-decoded fragment never counts as much as a
 // decoded one (and so the reported percentage cannot decrease mid-decode).
 // Backward-compatible addition — the reference estimate above is unchanged.
-double fountain_decoder_estimated_percent_complete_weighted(
+float fountain_decoder_estimated_percent_complete_weighted(
     fountain_decoder_t *decoder) {
   if (!decoder)
-    return 0.0;
+    return 0.0f;
   if (fountain_decoder_is_complete(decoder))
-    return 1.0;
+    return 1.0f;
   size_t parts = fountain_decoder_expected_part_count(decoder);
   if (parts == 0)
-    return 0.0;
+    return 0.0f;
 
-  double mixed_score = 0.0;
+  float mixed_score = 0.0f;
   mixed_parts_hash_t *hash = decoder->mixed_parts_hash;
   if (hash && hash->count > 0) {
     // Per-index partial scores from the mixed parts. Fragment indexes are in
@@ -1399,12 +1400,12 @@ double fountain_decoder_estimated_percent_complete_weighted(
     // the Python dict `mixed_index_scoring`. If the scratch allocation fails,
     // mixed_score stays 0 — still the weighted metric, just without partial
     // credit, so the value never jumps to a different scale.
-    double *scoring = safe_malloc(parts * sizeof(double));
+    float *scoring = safe_malloc(parts * sizeof(float));
     if (scoring) {
       for (size_t b = 0; b < hash->capacity; b++) {
         for (hash_entry_t *entry = hash->buckets[b]; entry;
              entry = entry->next) {
-          double score = 1.0 / (double)entry->key.count;
+          float score = 1.0f / (float)entry->key.count;
           for (size_t k = 0; k < entry->key.count; k++) {
             size_t index = entry->key.indexes[k];
             if (index < parts)
@@ -1413,19 +1414,19 @@ double fountain_decoder_estimated_percent_complete_weighted(
         }
       }
       for (size_t i = 0; i < parts; i++) {
-        mixed_score += scoring[i] < 0.75 ? scoring[i] : 0.75;
+        mixed_score += scoring[i] < 0.75f ? scoring[i] : 0.75f;
       }
       safe_free(scoring);
     }
   }
 
-  double num_complete = (double)decoder->received_part_indexes.count;
-  double progress = (num_complete + mixed_score) / (double)parts;
+  float num_complete = (float)decoder->received_part_indexes.count;
+  float progress = (num_complete + mixed_score) / (float)parts;
   // Never report >= 1.0 while incomplete (same 0.99 cap as the reference
   // estimate): keeps rounded displays below 100% and bounds the result even
   // if a stale mixed entry or mismatched stream breaks the invariant that
   // mixed keys exclude received indexes.
-  return progress > 0.99 ? 0.99 : progress;
+  return progress > 0.99f ? 0.99f : progress;
 }
 
 uint8_t *fountain_decoder_result_message(fountain_decoder_t *decoder) {

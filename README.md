@@ -97,6 +97,13 @@ expected during scanning).
 > the state constants (or use `ur_decoder_state_is_error()` /
 > `ur_decoder_state_is_terminal()`); never treat it as a boolean.
 
+> **Progress API type change:** `ur_decoder_estimated_percent_complete()`
+> and `ur_decoder_estimated_percent_complete_weighted()` (and the
+> `fountain_decoder_*` equivalents) now return single-precision `float`
+> instead of `double` — they are display-only estimates, and embedded
+> FPUs are single-precision. Fragment-selection interop math is unchanged
+> and deliberately remains `double`.
+
 Type-specific helpers (`bytes_from_cbor`, `psbt_from_cbor`,
 `output_from_descriptor_string`, etc.) live in `src/types/*.h`.
 

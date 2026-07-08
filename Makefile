@@ -2,6 +2,10 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -g
+# Library objects only: catches accidental float→double promotion in the
+# float-typed progress code (test files stay exempt — printf varargs
+# promote floats by design).
+LIB_WARNFLAGS = -Wdouble-promotion
 LDFLAGS =
 INCLUDES = -Isrc
 SRCDIR = src
@@ -63,7 +67,7 @@ $(TARGET): $(OBJECTS)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(LIB_WARNFLAGS) $(INCLUDES) -c $< -o $@
 
 $(TEST_UTILS_OBJECT): tests/test_utils.c tests/test_utils.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -73,7 +77,7 @@ $(TEST_HARNESS_OBJECT): tests/test_harness.c tests/test_harness.h
 
 # Pattern rule: build each test binary.
 tests/test_ur_%: tests/test_ur_%.c $(TEST_SUPPORT_OBJECTS) $(TARGET)
-	$(CC) $(CFLAGS) $(INCLUDES) $< $(TEST_SUPPORT_OBJECTS) -L$(SRCDIR) -lur -lm $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) $< $(TEST_SUPPORT_OBJECTS) -L$(SRCDIR) -lur $(LDFLAGS) -o $@
 
 # Generate a `test-<name>` phony target per stem that runs the corresponding binary.
 define TEST_RUN_RULE

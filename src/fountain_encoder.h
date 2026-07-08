@@ -2,6 +2,7 @@
 #define FOUNTAIN_ENCODER_H
 
 #include "fountain_types.h"
+#include "fountain_utils.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -30,6 +31,9 @@ typedef struct fountain_encoder {
   fragment_array_t fragments;
   uint32_t seq_num;
   part_indexes_t last_part_indexes;
+  // Degree sampler cached across next_part calls — the alias table depends
+  // only on seq_len. Interop-critical double math; see fountain_utils.c.
+  random_sampler_t degree_sampler;
 } fountain_encoder_t;
 
 /**
