@@ -45,10 +45,18 @@ if(ESP_PLATFORM)
     # Route sha256_compat.h to the mbedTLS PSA API (hardware-accelerated on
     # ESP32P4). PC builds omit this flag and use the bundled src/sha256/sha256.c.
     target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_USE_MBEDTLS_SHA256)
+
+    if(CONFIG_UR_CRC32_SLICE_BY_8)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_CRC32_SLICE_BY_8)
+    endif()
 else()
     # Plain host build (e.g. added via add_subdirectory from a simulator or
     # test harness). Uses the bundled SHA-256 so it has no dependencies.
+    option(UR_CRC32_SLICE_BY_8 "CRC32: use slice-by-8 (faster, +8 KB flash)" ON)
     add_library(ur STATIC ${UR_SRCS} "src/sha256/sha256.c")
     set_target_properties(ur PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_include_directories(ur PUBLIC "src")
+    if(UR_CRC32_SLICE_BY_8)
+        target_compile_definitions(ur PUBLIC UR_CRC32_SLICE_BY_8)
+    endif()
 endif()

@@ -5,14 +5,46 @@
 // Licensed under the "BSD-2-Clause Plus Patent License"
 //
 // CRC32 checksum implementation for data integrity verification.
-// Uses nibble-based (4-bit) lookup table to save 960 bytes ROM
-// compared to full 256-entry table, at cost of 2 lookups per byte.
 //
 // This is an independent implementation written using
 // foundation-ur-py as a reference for testing and validation.
 //
 
 #include "crc32.h"
+
+#if defined(UR_CRC32_SLICE_BY_8)
+
+#include <string.h>
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "UR_CRC32_SLICE_BY_8 requires little-endian word loads"
+#endif
+
+#include "crc32_slice_table.h"
+
+uint32_t crc32_calculate(const uint8_t *data, size_t length) {
+  if (!data || length == 0)
+    return 0;
+
+  uint32_t crc = 0xFFFFFFFFu;
+  size_t i = 0;
+  for (; i + 8 <= length; i += 8) {
+    uint32_t lo, hi;
+    memcpy(&lo, data + i, 4);
+    memcpy(&hi, data + i + 4, 4);
+    lo ^= crc;
+    crc = crc32_slice[7][lo & 0xFF] ^ crc32_slice[6][(lo >> 8) & 0xFF] ^
+          crc32_slice[5][(lo >> 16) & 0xFF] ^
+          crc32_slice[4][(lo >> 24) & 0xFF] ^ crc32_slice[3][hi & 0xFF] ^
+          crc32_slice[2][(hi >> 8) & 0xFF] ^ crc32_slice[1][(hi >> 16) & 0xFF] ^
+          crc32_slice[0][(hi >> 24) & 0xFF];
+  }
+  for (; i < length; i++)
+    crc = crc32_slice[0][(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+  return ~crc;
+}
+
+#else // fallback: nibble-based (4-bit) table — 64 bytes ROM, 2 lookups/byte
 
 // Nibble-based CRC32 table (polynomial 0xEDB88320) - 64 bytes ROM
 static const uint32_t crc32_table[16] = {
@@ -31,3 +63,5 @@ uint32_t crc32_calculate(const uint8_t *data, size_t length) {
   }
   return ~crc;
 }
+
+#endif

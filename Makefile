@@ -10,6 +10,7 @@ LDFLAGS =
 INCLUDES = -Isrc
 SRCDIR = src
 OBJDIR = src/obj
+UR_CRC32_SLICE_BY_8 ?= 1
 
 # DEBUG=1 switches to -O0 with AddressSanitizer + UndefinedBehaviorSanitizer.
 # Requires a full rebuild when toggling (sanitized and non-sanitized objects
@@ -19,6 +20,11 @@ ifeq ($(DEBUG),1)
   LDFLAGS += -fsanitize=address,undefined
 else
   CFLAGS  += -O2
+endif
+
+# Defaults to the fast CRC path; set UR_CRC32_SLICE_BY_8=0 for the small table.
+ifeq ($(UR_CRC32_SLICE_BY_8),1)
+  CFLAGS += -DUR_CRC32_SLICE_BY_8
 endif
 
 # Source files (exclude test files)
@@ -91,7 +97,7 @@ clean:
 
 # Dependencies
 $(OBJDIR)/utils.o: $(SRCDIR)/utils.c $(SRCDIR)/utils.h
-$(OBJDIR)/crc32.o: $(SRCDIR)/crc32.c $(SRCDIR)/crc32.h
+$(OBJDIR)/crc32.o: $(SRCDIR)/crc32.c $(SRCDIR)/crc32.h $(SRCDIR)/crc32_slice_table.h
 $(OBJDIR)/bytewords.o: $(SRCDIR)/bytewords.c $(SRCDIR)/bytewords.h $(SRCDIR)/utils.h $(SRCDIR)/crc32.h
 $(OBJDIR)/fountain_utils.o: $(SRCDIR)/fountain_utils.c $(SRCDIR)/fountain_utils.h $(SRCDIR)/fountain_decoder.h $(SRCDIR)/fountain_types.h $(SRCDIR)/utils.h $(SRCDIR)/sha256/sha256_compat.h $(SRCDIR)/sha256/sha256.h
 $(OBJDIR)/fountain_decoder.o: $(SRCDIR)/fountain_decoder.c $(SRCDIR)/fountain_decoder.h $(SRCDIR)/fountain_utils.h $(SRCDIR)/fountain_types.h $(SRCDIR)/crc32.h $(SRCDIR)/utils.h
