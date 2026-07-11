@@ -19,4 +19,16 @@ config UR_XOR_ESP32P4_SIMD
         runs; unaligned data transparently falls back to the word-wise
         path. ESP32-P4 only.
 
+config UR_ALLOC_PSRAM
+    bool "Allocate working buffers in PSRAM"
+    default y
+    help
+        Route the library's allocations to external PSRAM
+        (MALLOC_CAP_SPIRAM), falling back to internal RAM when PSRAM is
+        absent or exhausted. Keeps the fountain decoder's churn of small
+        variably-sized buffers from consuming and fragmenting internal
+        RAM. Disable to keep buffers in internal RAM instead, e.g. when
+        chasing XOR throughput on ESP32-P4 or reserving PSRAM for
+        framebuffers. Harmless no-op when SPIRAM is not configured.
+
 endmenu

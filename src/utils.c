@@ -130,8 +130,9 @@ void ur_xor(uint8_t *restrict out, const uint8_t *restrict a,
  * when absent). ESP-IDF's malloc() keeps small allocations in internal RAM,
  * where the fountain decoder's churn of variably-sized part buffers fragments
  * that scarce heap. These are plain CPU-accessed byte buffers, so cached PSRAM
- * is fine, and free() works on heap_caps allocations. Off-device: no-op. */
-#ifdef ESP_PLATFORM
+ * is fine, and free() works on heap_caps allocations. Off-device: no-op.
+ * Opt out with UR_NO_PSRAM_ALLOC (Kconfig: UR_ALLOC_PSRAM). */
+#if defined(ESP_PLATFORM) && !defined(UR_NO_PSRAM_ALLOC)
 #include "esp_heap_caps.h"
 static void *ur_heap_malloc(size_t size) {
   void *p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);

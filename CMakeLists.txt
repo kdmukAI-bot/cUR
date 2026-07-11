@@ -52,6 +52,12 @@ if(ESP_PLATFORM)
     if(CONFIG_UR_XOR_ESP32P4_SIMD)
         target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_XOR_ESP32P4_SIMD)
     endif()
+    # PSRAM routing is default-on under ESP_PLATFORM so ESP builds that
+    # bypass this CMakeLists still get it; the Kconfig opt-out therefore
+    # maps to a negative define.
+    if(NOT CONFIG_UR_ALLOC_PSRAM)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_NO_PSRAM_ALLOC)
+    endif()
 else()
     # Plain host build (e.g. added via add_subdirectory from a simulator or
     # test harness). Uses the bundled SHA-256 so it has no dependencies.
