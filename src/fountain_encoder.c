@@ -419,15 +419,31 @@ static bool mix_fragments(const fountain_encoder_t *encoder,
     return false;
   }
 
-  // safe_malloc (not bare calloc) so the buffer goes through the platform
-  // allocator routing — PSRAM placement and, with UR_XOR_ESP32P4_SIMD, the
-  // 16-byte alignment the vector XOR path needs.
-  uint8_t *result = safe_malloc(encoder->fragment_len);
+  // safe_malloc_uninit (not bare calloc) so the buffer goes through the
+  // platform allocator routing — PSRAM placement and, with
+  // UR_XOR_ESP32P4_SIMD, the 16-byte alignment the vector XOR path needs.
+  // The first fragment is copied instead of XOR-ed into zeroed memory, so
+  // the buffer is written once, not twice (for degree-1 parts — every
+  // fixed-rate frame — that halves the work).
+  uint8_t *result = safe_malloc_uninit(encoder->fragment_len);
   if (!result) {
     return false;
   }
 
-  for (size_t i = 0; i < indexes->count; i++) {
+  if (indexes->count == 0) {
+    // Unreachable (part degree is always >= 1); preserve the previous
+    // implementation's zero-filled result just in case.
+    memset(result, 0, encoder->fragment_len);
+  } else {
+    size_t first = indexes->indexes[0];
+    if (first >= encoder->fragments.count) {
+      free(result);
+      return false;
+    }
+    memcpy(result, encoder->fragments.fragments[first], encoder->fragment_len);
+  }
+
+  for (size_t i = 1; i < indexes->count; i++) {
     size_t index = indexes->indexes[i];
     if (index >= encoder->fragments.count) {
       free(result);
