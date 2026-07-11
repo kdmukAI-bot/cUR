@@ -126,20 +126,11 @@ void ur_xor(uint8_t *restrict out, const uint8_t *restrict a,
     out[i] = a[i] ^ b[i];
 }
 
-/* Allocator routing. On an ESP32 with external SPIRAM, the fountain decoder's
- * working set — up to MAX_MIXED_PARTS part buffers plus per-part fragments,
- * allocated and freed as parts arrive and are XOR-reduced — is many small,
- * variably-sized allocations. ESP-IDF's default malloc() forces allocations at
- * or below CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL (16 KB by default) into scarce
- * INTERNAL RAM, where they steadily grow the footprint and, worse, fragment the
- * heap: the largest contiguous free block shrinks well below total free. The
- * damaging symptom is not the decode itself running out of memory, but a later
- * allocation that needs a contiguous internal block failing even with ample
- * free RAM — e.g. re-initializing another internal-RAM subsystem after a scan
- * (re-launching the camera, whose driver needs a contiguous internal buffer/
- * stack the fragmented heap can no longer supply). These are plain CPU-accessed
- * byte buffers, so route them to PSRAM instead (falling back to internal RAM if
- * no PSRAM is present). Off-device this is a no-op. */
+/* On ESP32 targets, route allocations to PSRAM (falling back to internal RAM
+ * when absent). ESP-IDF's malloc() keeps small allocations in internal RAM,
+ * where the fountain decoder's churn of variably-sized part buffers fragments
+ * that scarce heap. These are plain CPU-accessed byte buffers, so cached PSRAM
+ * is fine, and free() works on heap_caps allocations. Off-device: no-op. */
 #ifdef ESP_PLATFORM
 #include "esp_heap_caps.h"
 static void *ur_heap_malloc(size_t size) {
@@ -147,6 +138,12 @@ static void *ur_heap_malloc(size_t size) {
   return p ? p : heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 }
 static void *ur_heap_realloc(void *ptr, size_t size) {
+  if (size == 0) {
+    /* heap_caps_realloc(ptr, 0, caps) frees ptr and returns NULL; retrying
+     * with other caps would double-free. Match glibc: single free. */
+    free(ptr);
+    return NULL;
+  }
   void *p = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   return p ? p
            : heap_caps_realloc(ptr, size,
