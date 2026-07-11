@@ -16,10 +16,69 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(UR_XOR_ESP32P4_SIMD)
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
+#error "UR_XOR_ESP32P4_SIMD requires ESP32-P4"
+#endif
+
+// Pointers are pinned because esp.vld/esp.vst require low address registers.
+static inline void ur_xor128_inplace(uint8_t *dst, const uint8_t *src,
+                                     size_t chunks) {
+  register uint8_t *d __asm__("a0") = dst;
+  register const uint8_t *s __asm__("a1") = src;
+  __asm__ volatile("1:\n"
+                   "esp.vld.128.ip q0, a1, 16\n"
+                   "esp.vld.128.ip q1, a0, 0\n"
+                   "esp.xorq q0, q0, q1\n"
+                   "esp.vst.128.ip q0, a0, 16\n"
+                   "addi %[c], %[c], -1\n"
+                   "bnez %[c], 1b\n"
+                   : [c] "+r"(chunks), "+r"(d), "+r"(s)
+                   :
+                   : "memory");
+}
+static inline void ur_xor128_out(uint8_t *out, const uint8_t *a,
+                                 const uint8_t *b, size_t chunks) {
+  register uint8_t *o __asm__("a0") = out;
+  register const uint8_t *pa __asm__("a1") = a;
+  register const uint8_t *pb __asm__("a2") = b;
+  __asm__ volatile("1:\n"
+                   "esp.vld.128.ip q0, a1, 16\n"
+                   "esp.vld.128.ip q1, a2, 16\n"
+                   "esp.xorq q0, q0, q1\n"
+                   "esp.vst.128.ip q0, a0, 16\n"
+                   "addi %[c], %[c], -1\n"
+                   "bnez %[c], 1b\n"
+                   : [c] "+r"(chunks), "+r"(o), "+r"(pa), "+r"(pb)
+                   :
+                   : "memory");
+}
+#endif
+
 // In-place XOR: dst[i] ^= src[i] for n bytes. Word-wise (8 bytes/iter) with a
-// scalar tail -- roughly 4x faster than a byte loop. Buffers must not overlap.
+// scalar tail -- roughly 4x faster than a byte loop. On ESP32-P4 with
+// UR_XOR_ESP32P4_SIMD, 16-byte-aligned runs use the PIE 128-bit path (~16x).
+// Buffers must not overlap.
 void ur_xor_inplace(uint8_t *restrict dst, const uint8_t *restrict src,
                     size_t n) {
+#if defined(UR_XOR_ESP32P4_SIMD)
+  size_t head = (size_t)((0u - (uintptr_t)dst) & 15u);
+  if (head > n)
+    head = n;
+  for (size_t h = 0; h < head; h++)
+    dst[h] ^= src[h];
+  dst += head;
+  src += head;
+  n -= head;
+  if (((uintptr_t)src & 15u) == 0 && n >= 16) {
+    size_t chunks = n >> 4;
+    ur_xor128_inplace(dst, src, chunks);
+    size_t done = chunks << 4;
+    dst += done;
+    src += done;
+    n -= done;
+  }
+#endif
   size_t i = 0;
   for (; i + 8 <= n; i += 8) {
     uint64_t a, b;
@@ -35,6 +94,26 @@ void ur_xor_inplace(uint8_t *restrict dst, const uint8_t *restrict src,
 // Out-of-place XOR: out[i] = a[i] ^ b[i] for n bytes. Buffers must not overlap.
 void ur_xor(uint8_t *restrict out, const uint8_t *restrict a,
             const uint8_t *restrict b, size_t n) {
+#if defined(UR_XOR_ESP32P4_SIMD)
+  size_t head = (size_t)((0u - (uintptr_t)out) & 15u);
+  if (head > n)
+    head = n;
+  for (size_t h = 0; h < head; h++)
+    out[h] = a[h] ^ b[h];
+  out += head;
+  a += head;
+  b += head;
+  n -= head;
+  if (((uintptr_t)a & 15u) == 0 && ((uintptr_t)b & 15u) == 0 && n >= 16) {
+    size_t chunks = n >> 4;
+    ur_xor128_out(out, a, b, chunks);
+    size_t done = chunks << 4;
+    out += done;
+    a += done;
+    b += done;
+    n -= done;
+  }
+#endif
   size_t i = 0;
   for (; i + 8 <= n; i += 8) {
     uint64_t x, y;

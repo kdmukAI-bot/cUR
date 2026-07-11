@@ -49,6 +49,9 @@ if(ESP_PLATFORM)
     if(CONFIG_UR_CRC32_SLICE_BY_8)
         target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_CRC32_SLICE_BY_8)
     endif()
+    if(CONFIG_UR_XOR_ESP32P4_SIMD)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_XOR_ESP32P4_SIMD)
+    endif()
 else()
     # Plain host build (e.g. added via add_subdirectory from a simulator or
     # test harness). Uses the bundled SHA-256 so it has no dependencies.

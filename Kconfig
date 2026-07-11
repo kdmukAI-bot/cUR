@@ -8,4 +8,15 @@ config UR_CRC32_SLICE_BY_8
         nibble table. About 2.7x faster on ESP32-P4, at the cost of 8 KB
         of flash for a const lookup table.
 
+config UR_XOR_ESP32P4_SIMD
+    bool "Fountain XOR: use ESP32-P4 PIE 128-bit SIMD"
+    depends on IDF_TARGET_ESP32P4
+    default n
+    help
+        Use the ESP32-P4 PIE (xesppie) 128-bit vector unit for the
+        fountain-code XOR reduction. About 16x faster than a byte loop
+        (and ~4x faster than the portable word-wise path) on aligned
+        runs; unaligned data transparently falls back to the word-wise
+        path. ESP32-P4 only.
+
 endmenu
