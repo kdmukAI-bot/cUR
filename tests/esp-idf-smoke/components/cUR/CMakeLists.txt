@@ -18,3 +18,12 @@ idf_component_register(
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_USE_MBEDTLS_SHA256)
+
+# Force-build the optional performance paths so CI catches regressions in
+# them. The real Kconfig options (UR_CRC32_SLICE_BY_8, UR_XOR_ESP32P4_SIMD)
+# live in the repo-root Kconfig/CMakeLists.txt for integrators; this smoke
+# harness just enables them unconditionally for build coverage.
+target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_CRC32_SLICE_BY_8)
+if(CONFIG_IDF_TARGET_ESP32P4)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC UR_XOR_ESP32P4_SIMD)
+endif()
